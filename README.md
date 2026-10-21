@@ -57,3 +57,13 @@ All items share a single React store, persisted in browser localStorage. Demo ed
 **AI boundary:** The dashboard summary is deterministic text generated from the current mock item counts. It demonstrates the AI experience but does not call an LLM.
 
 **QA before merging:** Run `npm install && npm run build`, deploy the feature branch preview, then manually exercise Assign, Done, Snooze, Search and Reset with browser refreshes. This branch has not been browser-tested here.
+
+## Evidence-first demo data (Jira and Slack fixtures)
+
+Choose the discreet **Demo Data** button at the bottom of the sidebar. Six linked records are available: AUTH-234, PLAT-118, MOB-072, OPS-091, DATA-406, and WEB-319. Choose an issue, switch between Jira issue and Slack thread, inspect source metadata and dated messages, and open the linked WorkRadar item. From Item Details, follow **Open mock Jira issue and Slack thread** to return to the source evidence. Data is defined in `src/mockEvidence.ts` and rendered in `src/App.tsx`.
+
+The issue cards emulate Jira's common issue fields and issue activity; Slack cards emulate message threads, author/timestamp headers and channel context. They are purpose-built fictional fixtures, not exports from Atlassian or Salesforce and not exact reproductions of those vendors' interfaces. The demo reference date is 21 October 2026. Fixture text and original timestamps do not change when assigning or completing work locally: local WorkRadar action state is clearly separate from source-system evidence.
+
+Suggested narrative: Source first (AUTH-234 Jira and #identity-platform), follow the security review discussion, open the WorkRadar explanation, assign the issue, confirm it updates in the feed/search, and return to the source viewer. Repeat for OPS-091 to illustrate long-pending deprioritized work and PLAT-118 for urgent operational impact. Use Reset demo data when done.
+
+Before merge or deployment, run `npm install && npm run build` and smoke-test the source links, route state, responsive layout, and interactions. This commit is not automatically deployed.
