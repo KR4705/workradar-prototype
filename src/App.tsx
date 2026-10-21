@@ -136,9 +136,9 @@ type DemoStore = {
   snooze: (id: string, days: number) => void
   reset: () => void
 }
-const demoContext = createContext<DemoStore | null>(null)
+const DemoContext = createContext<DemoStore | null>(null)
 function useDemoStore() {
-  const context = useContext(demoContext)
+  const context = useContext(DemoContext)
   if (!context) throw new Error("Missing demo store")
   return context
 }
@@ -589,7 +589,7 @@ function Dashboard({
                   <span className="ai-icon">
                     <Icon name="sparkle" size={16} />
                   </span>
-                  WorkRadar recap
+                  AI-generated summary · simulated
                 </div>
                 <h2>What happened today</h2>
                 <p>
@@ -818,7 +818,7 @@ function ItemDetails({
             {Array.from(new Set([...initialRecords.map(i => i.owner), assignedOwner])).map(person => <option key={person}>{person}</option>)}
           </select>
           <Button variant="primary" onClick={() => assign(item.id, assignedOwner)}>Assign</Button>
-          <Button onClick={() => snooze(item.id, 3)}>Snooze 3 days</Button>
+          <Button onClick={() => { snooze(item.id, 3); back() }}>Snooze 3 days</Button>
           <Button onClick={() => { complete(item.id); back() }}>Mark Done</Button>
         </div>
         {item.snoozedUntil && <p style={{marginTop:12}}>Snoozed until {item.snoozedUntil}. This item is hidden from the active feed until that date.</p>}
@@ -1005,7 +1005,7 @@ function SearchPage({
       const haystack = [item.id,item.title,item.owner,item.project,item.status,item.priority,item.reason,item.blocker,item.nextAction,item.sources.join(" ")].join(" ").toLowerCase()
       return genericTerms.every(term => haystack.includes(term))
     })
-  }, [normalized,searchSource,searchPriority,searchStatus,searchOwner])
+  }, [normalized,searchSource,searchPriority,searchStatus,searchOwner,items])
 
   return (
     <div className={`page search-page ${normalized ? "has-results" : ""}`}>
@@ -1298,7 +1298,7 @@ export default function App() {
     date.setUTCDate(date.getUTCDate() + days)
     setRecords(current => current.map(item => item.id === id ? {...item, snoozedUntil: date.toISOString().slice(0,10)} : item))
   }
-  const reset = () => { setRecords(initialRecords); setFollowedUpIds([]); setQaScenario("default"); navigate("dashboard") }
+  const reset = () => { setRecords(initialRecords); setFollowedUpIds([]); setQaScenario("default"); setView("dashboard") }
   useEffect(() => {
     localStorage.setItem("workradar-followups", JSON.stringify(followedUpIds))
   }, [followedUpIds])
@@ -1340,7 +1340,7 @@ export default function App() {
   }
 
   return (
-    <demoContext.Provider value={{ records, assign, complete, snooze, reset }}>
+    <DemoContext.Provider value={{ records, assign, complete, snooze, reset }}>
     <div className="app-shell">
       <Sidebar view={view} navigate={navigate} />
       <div className="content">
@@ -1386,6 +1386,6 @@ export default function App() {
         </div>
       )}
     </div>
-    </demoContext.Provider>
+    </DemoContext.Provider>
   )
 }
