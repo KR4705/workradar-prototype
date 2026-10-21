@@ -7,7 +7,7 @@ WorkRadar is a demo application for viewing work signals across Jira and Slack. 
 2. **Priority Feed:** Browse ranked work, filter by priority, source, owner, status or age, and open a detail.
 3. **Search:** Find work by ID, title, owner, source, project, or supported natural-language filters.
 4. **Details:** Understand context, source facts, rationale, timeline, and suggested next step. Follow the link to its Jira/Slack evidence.
-5. **Demo Data:** The discreet sidebar link opens six corresponding Jira-style issues and Slack-style conversation threads with timestamps, authors, descriptions, dependencies, and links back to WorkRadar items.
+5. **Evidence preview:** On Item Details, open the mock Jira issue or Slack conversation in a sandboxed iframe modal. Close the modal to return to the same WorkRadar detail.
 6. **Preview States:** Inspect empty dashboard/feed/search and simulated source-error states for presentation purposes.
 
 ## Source fixture coverage
@@ -25,7 +25,7 @@ npm run build
 ```
 
 ## Presentation walkthrough
-Start at Demo Data → AUTH-234 Jira issue → Slack thread → WorkRadar detail → Priority Feed and Dashboard. Then open OPS-091 to highlight aging work and Search for its issue key. Finish by showing how each summary/evidence link remains traceable to the original mock source. Use Preview States to show graceful empty and error behavior.
+Start at Dashboard → AUTH-234 Item Details → Jira preview modal → Slack preview modal → Priority Feed. Then open OPS-091 to highlight aging work and Search for its issue key. Finish by showing how each summary/evidence link remains traceable to the original mock source. Use Preview States to show graceful empty and error behavior.
 
 ## QA before merge
-Run `npm run build`, then check Dashboard, Feed, Search, Details, Demo Data, forward/back evidence navigation, and empty/error previews in desktop and mobile layouts. Verify no Assign, Mark Done, Snooze, follow-up toggle, or reset-action control is present.
+Run `npm run build`, then check Dashboard, Feed, Search, Details, Jira and Slack iframe modals, close/reopen behavior, and empty/error previews in desktop and mobile layouts. Verify no Assign, Mark Done, Snooze, follow-up toggle, or reset-action control is present.
