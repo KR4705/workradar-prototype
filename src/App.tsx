@@ -1,6 +1,7 @@
+import { mockEvidence } from "./mockEvidence"
 import { useEffect, useMemo, useState, useContext, createContext, type ReactNode } from "react"
 
-type View = "dashboard" | "feed" | "search" | "details" | "states"
+type View = "dashboard" | "feed" | "search" | "details" | "states" | "data"
 type Priority = "High" | "Medium" | "Low"
 type Source = "Jira" | "Slack"
 type QaScenario = "default" | "empty-search" | "empty-priority" | "no-dashboard-data" | "integration-error" | "no-integrations"
@@ -400,6 +401,7 @@ function Sidebar({
         ))}
       </nav>
       <div className="sidebar-bottom">
+        <button className="nav-link" type="button" onClick={() => navigate("data")} style={{width:"100%",marginBottom:12,opacity:.75,fontSize:13}}><Icon name="inbox" size={16}/> <span>Demo Data</span></button>
         <button
           className="sync-status"
           type="button"
@@ -773,11 +775,13 @@ function ItemDetails({
   back,
   followedUp,
   setFollowedUp,
+  openEvidence,
 }: {
   item: WorkItem
   back: () => void
   followedUp: boolean
   setFollowedUp: (value: boolean) => void
+  openEvidence: () => void
 }) {
   const { assign, complete, snooze } = useDemoStore()
   const [assignedOwner, setAssignedOwner] = useState(item.owner)
@@ -832,6 +836,7 @@ function ItemDetails({
         </div>
       )}
 
+      <div className="local-note" style={{marginBottom:14}}><Icon name="inbox" size={16} /><span>Trace this insight to its source: </span><button type="button" onClick={openEvidence} style={{textDecoration:"underline",fontWeight:600,cursor:"pointer"}}>Open mock Jira issue and Slack thread ↗</button></div>
       <div className="detail-grid">
         <main className="detail-main">
           <section className="detail-card insight-card">
@@ -1231,6 +1236,60 @@ function EmptyState({
   )
 }
 
+
+function DemoDataPage({ records, focus, openItem, onAll }: {
+  records: WorkItem[]; focus?: string; openItem: (item: WorkItem, from: View) => void; onAll: () => void
+}) {
+  const [selected, setSelected] = useState(focus || mockEvidence[0].id)
+  const [source, setSource] = useState<"jira" | "slack">("jira")
+  useEffect(() => { if(focus) setSelected(focus) }, [focus])
+  const issue = mockEvidence.find(e => e.id === selected) || mockEvidence[0]
+  const item = records.find(e => e.id === issue.id)
+  const actionStyle = {fontSize:13,padding:"8px 12px",borderRadius:8,border:"1px solid #d5d9e0",background:"#fff",cursor:"pointer"} as const
+  const sectionStyle = {padding:22,border:"1px solid #e1e5eb",borderRadius:12,background:"#fff"} as const
+  return <div className="page">
+    <PageHeader title="Demo Data" subtitle="Source-first walkthrough · Simulated Jira issues and Slack conversations · Reference date: 21 October 2026" />
+    <p style={{fontSize:13,marginBottom:16,color:"#687184"}}>All records on this page are fictional, locally embedded fixtures. No Jira or Slack workspace is connected. Select a record, inspect the evidence, then open the corresponding WorkRadar insight.</p>
+    <div style={{display:"flex",gap:9,flexWrap:"wrap",marginBottom:16}}>
+      {mockEvidence.map(e => <button key={e.id} type="button" onClick={() => { setSelected(e.id); onAll() }} style={{...actionStyle, background:selected===e.id?"#edf3ff":"#fff",borderColor:selected===e.id?"#739cf5":"#d5d9e0"}}>{e.id}</button>)}
+    </div>
+    <div style={{display:"flex",gap:8,marginBottom:15}}>
+      <button type="button" onClick={()=>setSource("jira")} style={{...actionStyle,fontWeight:source==="jira"?700:400}}>Jira issue</button>
+      <button type="button" onClick={()=>setSource("slack")} style={{...actionStyle,fontWeight:source==="slack"?700:400}}>Slack thread ({issue.messages.length})</button>
+      {item && <button type="button" onClick={()=>openItem(item,"data")} style={{...actionStyle,marginLeft:"auto",background:"#eef3ff"}}>View in WorkRadar →</button>}
+    </div>
+    {source === "jira" ? <section style={sectionStyle}>
+      <div style={{fontSize:12,color:"#637085",marginBottom:10}}>Projects / {item?.project || "Demo"} / {issue.id} <span style={{float:"right"}}>JIRA · MOCK ISSUE</span></div>
+      <h2 style={{fontSize:23,marginBottom:12}}>{item?.title || issue.id}</h2>
+      <div style={{display:"flex",gap:20,flexWrap:"wrap",marginBottom:24,fontSize:13}}>
+        <span>Type: <b>{issue.issueType}</b></span><span>Status: <b>{item?.status || "Pending"}</b></span>
+        <span>Priority: <b>{item?.priority}</b></span><span>Assignee: <b>{item?.owner}</b></span>
+      </div>
+      <h3 style={{fontSize:15,marginBottom:8}}>Description</h3><p>{issue.description}</p>
+      <div style={{display:"flex",gap:24,flexWrap:"wrap",fontSize:13,marginTop:22,color:"#637085"}}><span>Created: {issue.created}</span><span>Last source update: {issue.updated}</span><span>Issue key: {issue.id}</span></div>
+      <div style={{marginTop:22,padding:15,background:"#f7f9fc",borderRadius:8}}><strong>Dependency / blocker</strong><p style={{marginTop:6}}>{item?.blocker}</p></div>
+      <h3 style={{fontSize:15,marginTop:24}}>Activity</h3>
+      {issue.messages.map((m,i)=><p key={i} style={{padding:"9px 0",borderBottom:"1px solid #eee",fontSize:13}}><b>{m.timestamp}</b> · {m.author}: {m.text}</p>)}
+      <button type="button" onClick={()=>setSource("slack")} style={{...actionStyle,marginTop:16}}>View linked Slack conversation →</button>
+    </section> : <section style={sectionStyle}>
+      <div style={{fontSize:12,color:"#637085",marginBottom:14}}>SLACK · MOCK CONVERSATION · WORKRADAR DEMO WORKSPACE</div>
+      <h2 style={{fontSize:21,marginBottom:8}}># {issue.channel}</h2>
+      <p style={{fontSize:13,color:"#637085",marginBottom:22}}>Thread referencing <b>{issue.id}</b> · {issue.messages.length} messages</p>
+      {issue.messages.map((m,i)=><div key={i} style={{display:"flex",gap:14,padding:"17px 0",borderTop:"1px solid #e9edf2"}}>
+        <div style={{width:36,height:36,flexShrink:0,borderRadius:7,background:"#e7e1f2",display:"grid",placeItems:"center",fontWeight:700}}>{m.author.split(" ").map(n=>n[0]).join("")}</div>
+        <div><div style={{marginBottom:6}}><strong>{m.author}</strong> <span style={{fontSize:12,color:"#687184",marginLeft:8}}>{m.timestamp}</span></div><p style={{fontSize:14}}>{m.text}</p></div>
+      </div>)}
+      <button type="button" onClick={()=>setSource("jira")} style={{...actionStyle,marginTop:18}}>View linked Jira issue →</button>
+    </section>}
+    <div style={{...sectionStyle,marginTop:16}}><span className="eyebrow">WORKRADAR INTERPRETATION</span>
+      <h3 style={{fontSize:17,margin:"9px 0"}}>{item?.reason}</h3>
+      <p style={{fontSize:13}}>Recommended next step: {item?.nextAction}</p>
+      <p style={{fontSize:12,color:"#637085",marginTop:10}}>Provenance: {issue.id} Jira issue + #{issue.channel} conversation. Local demo actions modify WorkRadar's stored copy, not the original source fixture.</p>
+      {item && <button type="button" onClick={()=>openItem(item,"data")} style={{...actionStyle,marginTop:14}}>Open work item →</button>}
+    </div>
+  </div>
+}
+
 function StatesPage({ navigate }: { navigate: (view: View) => void }) {
   return (
     <div className="page states-page">
@@ -1282,6 +1341,7 @@ export default function App() {
   const [qaToast, setQaToast] = useState("")
   const [selectedItem, setSelectedItem] = useState<WorkItem>(initialRecords[0])
   const [returnView, setReturnView] = useState<View>("feed")
+  const [evidenceFocus, setEvidenceFocus] = useState<string | undefined>()
   const [followedUpIds, setFollowedUpIds] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem("workradar-followups") || "[]")
@@ -1313,6 +1373,7 @@ export default function App() {
     setReturnView(from)
     navigate("details")
   }
+  const openEvidence = (id?: string) => { setEvidenceFocus(id); navigate("data") }
 
   const setFollowedUp = (value: boolean) => {
     setFollowedUpIds((current) =>
@@ -1373,9 +1434,11 @@ export default function App() {
             back={() => navigate(returnView)}
             followedUp={followedUpIds.includes(selectedItem.id)}
             setFollowedUp={setFollowedUp}
+            openEvidence={() => openEvidence(selectedItem.id)}
           />
         )}
         {view === "states" && <StatesPage navigate={navigate} />}
+        {view === "data" && <DemoDataPage records={records} focus={evidenceFocus} openItem={openItem} onAll={() => setEvidenceFocus(undefined)} />}
       </div>
       <QaControls scenario={qaScenario} onSelect={selectQaScenario} />
       <button type="button" onClick={reset} title="Reset all demo actions" style={{position:"fixed",right:16,bottom:90,zIndex:50,padding:"9px 14px",background:"#fff",color:"#333",border:"1px solid #bbb",borderRadius:9,cursor:"pointer"}}>Reset demo data</button>
