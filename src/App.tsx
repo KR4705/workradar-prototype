@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useState, useContext, createContext, type ReactNode } from "react"
 
 type View = "dashboard" | "feed" | "search" | "details" | "states"
 type Priority = "High" | "Medium" | "Low"
@@ -8,7 +8,7 @@ type QaScenario = "default" | "empty-search" | "empty-priority" | "no-dashboard-
 type WorkItem = {
   id: string
   title: string
-  status: "Blocked" | "Pending" | "In progress"
+  status: "Blocked" | "Pending" | "In progress" | "Done"
   priority: Priority
   duration: string
   durationKind: "Blocked" | "Pending" | "No update"
@@ -21,6 +21,7 @@ type WorkItem = {
   pendingSince: string
   lastUpdated: string
   due?: string
+  snoozedUntil?: string
 }
 
 const items: WorkItem[] = [
@@ -127,6 +128,40 @@ const items: WorkItem[] = [
     lastUpdated: "Oct 19, 2026 at 10:26 AM",
   },
 ]
+
+type DemoStore = {
+  records: WorkItem[]
+  assign: (id: string, owner: string) => void
+  complete: (id: string) => void
+  snooze: (id: string, days: number) => void
+  reset: () => void
+}
+const demoContext = createContext<DemoStore | null>(null)
+function useDemoStore() {
+  const context = useContext(demoContext)
+  if (!context) throw new Error("Missing demo store")
+  return context
+}
+const BASE_DATE = "2026-10-21"
+const isVisible = (item: WorkItem) =>
+  item.status !== "Done" && (!item.snoozedUntil || item.snoozedUntil <= BASE_DATE)
+const priorityOrder: Record<Priority, number> = { High: 0, Medium: 1, Low: 2 }
+const rankItems = (data: WorkItem[]) =>
+  [...data].sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority] ||
+    parseInt(b.duration, 10) - parseInt(a.duration, 10))
+const initialRecords = items
+function storedRecords(): WorkItem[] {
+  try {
+    const value = JSON.parse(localStorage.getItem("workradar-demo-v2") || "null")
+    if (!Array.isArray(value)) return initialRecords
+    return initialRecords.map(original => {
+      const saved = value.find((v: WorkItem) => v.id === original.id)
+      return saved ? { ...original, owner: typeof saved.owner === "string" ? saved.owner : original.owner,
+        status: ["Blocked", "Pending", "In progress", "Done"].includes(saved.status) ? saved.status : original.status,
+        snoozedUntil: typeof saved.snoozedUntil === "string" ? saved.snoozedUntil : undefined } : original
+    })
+  } catch { return initialRecords }
+}
 
 function Icon({ name, size = 18 }: { name: string; size?: number }) {
   const paths: Record<string, ReactNode> = {
@@ -422,6 +457,8 @@ function Dashboard({
   onRetry?: () => void
   onResetPreview?: () => void
 }) {
+  const { records } = useDemoStore()
+  const items = rankItems(records.filter(isVisible))
   const [connectionMessage, setConnectionMessage] = useState(false)
   const hasNoData =
     scenario === "no-dashboard-data" || scenario === "no-integrations"
@@ -498,19 +535,19 @@ function Dashboard({
           <section className="metrics" aria-label="Team overview">
             <div className="metric">
               <span className="metric-label">Needs attention</span>
-              <strong>5</strong>
+              <strong>{items.filter(i => i.status !== "In progress").length}</strong>
               <span className="metric-note attention-note">
-                2 high priority
+                {items.filter(i => i.priority === "High").length} high priority
               </span>
             </div>
             <div className="metric">
               <span className="metric-label">Blocked</span>
-              <strong>3</strong>
-              <span className="metric-note">Across 3 projects</span>
+              <strong>{items.filter(i => i.status === "Blocked").length}</strong>
+              <span className="metric-note">Across {new Set(items.filter(i => i.status === "Blocked").map(i => i.project)).size} projects</span>
             </div>
             <div className="metric">
               <span className="metric-label">Aging</span>
-              <strong>3</strong>
+              <strong>{items.filter(i => parseInt(i.pendingSince.split("·")[1] || "0", 10) >= 14).length}</strong>
               <span className="metric-note">Pending 14+ days</span>
             </div>
             <div className="metric metric-calm">
@@ -556,24 +593,11 @@ function Dashboard({
                 </div>
                 <h2>What happened today</h2>
                 <p>
-                  CI pipeline reliability was updated after another failed
-                  build. Authentication migration remains blocked on security
-                  approval.
+                  {items.length ? `${items.filter(i => i.status === "Blocked").length} items are blocked, including ${items.filter(i => i.priority === "High" && i.status === "Blocked").length} high-priority blockers. ${items.filter(i => parseInt(i.duration, 10) >= 14).length} items have been waiting at least 14 days. Review the highest-impact work first.` : "No active work needs attention. Completed and snoozed items are excluded from this recap."}
                 </p>
                 <div className="citation-row">
-                  <button
-                    type="button"
-                    onClick={() => openItem(items[1], "dashboard")}
-                  >
-                    1
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openItem(items[0], "dashboard")}
-                  >
-                    2
-                  </button>
-                  <span>2 supporting records</span>
+                  {items.slice(0, 2).map((item, index) => <button key={item.id} type="button" onClick={() => openItem(item, "dashboard")}>{index + 1}</button>)}
+                  <span>{Math.min(2, items.length)} supporting mock records · Generated demo summary</span>
                 </div>
               </section>
 
@@ -627,6 +651,8 @@ function PriorityFeed({
   empty?: boolean
   navigate: (view: View) => void
 }) {
+  const { records } = useDemoStore()
+  const items = rankItems(records.filter(isVisible))
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [activePriority, setActivePriority] = useState<Priority | "All">("All")
   const [owner, setOwner] = useState("All")
@@ -753,6 +779,9 @@ function ItemDetails({
   followedUp: boolean
   setFollowedUp: (value: boolean) => void
 }) {
+  const { assign, complete, snooze } = useDemoStore()
+  const [assignedOwner, setAssignedOwner] = useState(item.owner)
+  useEffect(() => setAssignedOwner(item.owner), [item.id, item.owner])
   return (
     <div className="page detail-page">
       <Button variant="quiet" className="back-button" onClick={back}>
@@ -781,6 +810,20 @@ function ItemDetails({
         </Button>
       </div>
 
+      <section className="detail-card" aria-label="Demo actions" style={{marginBottom: 18}}>
+        <span className="eyebrow">Functional demo actions · saved in this browser</span>
+        <div style={{display:"flex", gap:12, flexWrap:"wrap", alignItems:"center", marginTop:12}}>
+          <label htmlFor="assign-owner">Assign to</label>
+          <select id="assign-owner" value={assignedOwner} onChange={e => setAssignedOwner(e.target.value)} style={{padding:10,borderRadius:8}}>
+            {Array.from(new Set([...initialRecords.map(i => i.owner), assignedOwner])).map(person => <option key={person}>{person}</option>)}
+          </select>
+          <Button variant="primary" onClick={() => assign(item.id, assignedOwner)}>Assign</Button>
+          <Button onClick={() => snooze(item.id, 3)}>Snooze 3 days</Button>
+          <Button onClick={() => { complete(item.id); back() }}>Mark Done</Button>
+        </div>
+        {item.snoozedUntil && <p style={{marginTop:12}}>Snoozed until {item.snoozedUntil}. This item is hidden from the active feed until that date.</p>}
+        {item.status === "Done" && <p style={{marginTop:12}}>Completed in demo workspace.</p>}
+      </section>
       {followedUp && (
         <div className="local-note">
           <Icon name="check" size={16} />
@@ -926,6 +969,8 @@ function SearchPage({
   forceEmpty?: boolean
   onClearPreview?: () => void
 }) {
+  const { records } = useDemoStore()
+  const items = records
   const [query, setQuery] = useState(forceEmpty ? "No matching work" : "")
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [searchSource, setSearchSource] = useState("All")
@@ -998,7 +1043,7 @@ function SearchPage({
           <label>Source <select value={searchSource} onChange={e=>setSearchSource(e.target.value)}><option value="All">All</option><option>Jira</option><option>Slack</option></select></label>
           <label>Priority <select value={searchPriority} onChange={e=>setSearchPriority(e.target.value)}><option value="All">Any</option><option>High</option><option>Medium</option><option>Low</option></select></label>
           <label>Owner <select value={searchOwner} onChange={e=>setSearchOwner(e.target.value)}><option value="All">Anyone</option>{items.map(item=><option key={item.id}>{item.owner}</option>)}</select></label>
-          <label>Status <select value={searchStatus} onChange={e=>setSearchStatus(e.target.value)}><option value="All">Any</option><option>Blocked</option><option>Pending</option><option>In progress</option></select></label>
+          <label>Status <select value={searchStatus} onChange={e=>setSearchStatus(e.target.value)}><option value="All">Any</option><option>Blocked</option><option>Pending</option><option>In progress</option><option>Done</option></select></label>
           <Button variant="quiet" onClick={()=>{setSearchSource("All");setSearchPriority("All");setSearchStatus("All");setSearchOwner("All")}}>Clear filters</Button>
         </div>
       )}
@@ -1231,10 +1276,11 @@ function StatesPage({ navigate }: { navigate: (view: View) => void }) {
 }
 
 export default function App() {
+  const [records, setRecords] = useState<WorkItem[]>(storedRecords)
   const [view, setView] = useState<View>("dashboard")
   const [qaScenario, setQaScenario] = useState<QaScenario>("default")
   const [qaToast, setQaToast] = useState("")
-  const [selectedItem, setSelectedItem] = useState<WorkItem>(items[0])
+  const [selectedItem, setSelectedItem] = useState<WorkItem>(initialRecords[0])
   const [returnView, setReturnView] = useState<View>("feed")
   const [followedUpIds, setFollowedUpIds] = useState<string[]>(() => {
     try {
@@ -1244,6 +1290,15 @@ export default function App() {
     }
   })
 
+  useEffect(() => { localStorage.setItem("workradar-demo-v2", JSON.stringify(records)) }, [records])
+  const assign = (id: string, owner: string) => setRecords(current => current.map(item => item.id === id ? {...item, owner} : item))
+  const complete = (id: string) => setRecords(current => current.map(item => item.id === id ? {...item, status: "Done", snoozedUntil: undefined} : item))
+  const snooze = (id: string, days: number) => {
+    const date = new Date(BASE_DATE + "T12:00:00Z")
+    date.setUTCDate(date.getUTCDate() + days)
+    setRecords(current => current.map(item => item.id === id ? {...item, snoozedUntil: date.toISOString().slice(0,10)} : item))
+  }
+  const reset = () => { setRecords(initialRecords); setFollowedUpIds([]); setQaScenario("default"); navigate("dashboard") }
   useEffect(() => {
     localStorage.setItem("workradar-followups", JSON.stringify(followedUpIds))
   }, [followedUpIds])
@@ -1285,6 +1340,7 @@ export default function App() {
   }
 
   return (
+    <demoContext.Provider value={{ records, assign, complete, snooze, reset }}>
     <div className="app-shell">
       <Sidebar view={view} navigate={navigate} />
       <div className="content">
@@ -1313,7 +1369,7 @@ export default function App() {
         )}
         {view === "details" && (
           <ItemDetails
-            item={selectedItem}
+            item={records.find(i => i.id === selectedItem.id) || selectedItem}
             back={() => navigate(returnView)}
             followedUp={followedUpIds.includes(selectedItem.id)}
             setFollowedUp={setFollowedUp}
@@ -1322,6 +1378,7 @@ export default function App() {
         {view === "states" && <StatesPage navigate={navigate} />}
       </div>
       <QaControls scenario={qaScenario} onSelect={selectQaScenario} />
+      <button type="button" onClick={reset} title="Reset all demo actions" style={{position:"fixed",right:16,bottom:90,zIndex:50,padding:"9px 14px",background:"#fff",color:"#333",border:"1px solid #bbb",borderRadius:9,cursor:"pointer"}}>Reset demo data</button>
       {qaToast && (
         <div className="qa-toast" role="status">
           <Icon name="check" size={16} />
@@ -1329,5 +1386,6 @@ export default function App() {
         </div>
       )}
     </div>
+    </demoContext.Provider>
   )
 }
