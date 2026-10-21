@@ -1,7 +1,7 @@
 import { mockEvidence } from "./mockEvidence"
 import { useEffect, useMemo, useState, useContext, createContext, type ReactNode } from "react"
 
-type View = "dashboard" | "feed" | "search" | "details" | "states" | "data"
+type View = "dashboard" | "feed" | "search" | "details" | "states"
 type Priority = "High" | "Medium" | "Low"
 type Source = "Jira" | "Slack"
 type QaScenario = "default" | "empty-search" | "empty-priority" | "no-dashboard-data" | "integration-error" | "no-integrations"
@@ -9,7 +9,7 @@ type QaScenario = "default" | "empty-search" | "empty-priority" | "no-dashboard-
 type WorkItem = {
   id: string
   title: string
-  status: "Blocked" | "Pending" | "In progress" | "Done"
+  status: "Blocked" | "Pending" | "In progress"
   priority: Priority
   duration: string
   durationKind: "Blocked" | "Pending" | "No update"
@@ -22,7 +22,6 @@ type WorkItem = {
   pendingSince: string
   lastUpdated: string
   due?: string
-  snoozedUntil?: string
 }
 
 const items: WorkItem[] = [
@@ -130,39 +129,17 @@ const items: WorkItem[] = [
   },
 ]
 
-type DemoStore = {
-  records: WorkItem[]
-  assign: (id: string, owner: string) => void
-  complete: (id: string) => void
-  snooze: (id: string, days: number) => void
-  reset: () => void
-}
+type DemoStore = { records: WorkItem[] }
 const DemoContext = createContext<DemoStore | null>(null)
 function useDemoStore() {
   const context = useContext(DemoContext)
   if (!context) throw new Error("Missing demo store")
   return context
 }
-const BASE_DATE = "2026-10-21"
-const isVisible = (item: WorkItem) =>
-  item.status !== "Done" && (!item.snoozedUntil || item.snoozedUntil <= BASE_DATE)
+const isVisible = (_item: WorkItem) => true
 const priorityOrder: Record<Priority, number> = { High: 0, Medium: 1, Low: 2 }
-const rankItems = (data: WorkItem[]) =>
-  [...data].sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority] ||
-    parseInt(b.duration, 10) - parseInt(a.duration, 10))
+const rankItems = (data: WorkItem[]) => [...data].sort((a,b) => priorityOrder[a.priority]-priorityOrder[b.priority] || parseInt(b.duration,10)-parseInt(a.duration,10))
 const initialRecords = items
-function storedRecords(): WorkItem[] {
-  try {
-    const value = JSON.parse(localStorage.getItem("workradar-demo-v2") || "null")
-    if (!Array.isArray(value)) return initialRecords
-    return initialRecords.map(original => {
-      const saved = value.find((v: WorkItem) => v.id === original.id)
-      return saved ? { ...original, owner: typeof saved.owner === "string" ? saved.owner : original.owner,
-        status: ["Blocked", "Pending", "In progress", "Done"].includes(saved.status) ? saved.status : original.status,
-        snoozedUntil: typeof saved.snoozedUntil === "string" ? saved.snoozedUntil : undefined } : original
-    })
-  } catch { return initialRecords }
-}
 
 function Icon({ name, size = 18 }: { name: string; size?: number }) {
   const paths: Record<string, ReactNode> = {
@@ -401,7 +378,6 @@ function Sidebar({
         ))}
       </nav>
       <div className="sidebar-bottom">
-        <button className="nav-link" type="button" onClick={() => navigate("data")} style={{width:"100%",marginBottom:12,opacity:.75,fontSize:13}}><Icon name="inbox" size={16}/> <span>Demo Data</span></button>
         <button
           className="sync-status"
           type="button"
@@ -591,7 +567,7 @@ function Dashboard({
                   <span className="ai-icon">
                     <Icon name="sparkle" size={16} />
                   </span>
-                  AI-generated summary · simulated
+                  AI-style summary · simulated
                 </div>
                 <h2>What happened today</h2>
                 <p>
@@ -773,19 +749,11 @@ function Disclosure({
 function ItemDetails({
   item,
   back,
-  followedUp,
-  setFollowedUp,
-  openEvidence,
 }: {
   item: WorkItem
   back: () => void
-  followedUp: boolean
-  setFollowedUp: (value: boolean) => void
-  openEvidence: () => void
 }) {
-  const { assign, complete, snooze } = useDemoStore()
-  const [assignedOwner, setAssignedOwner] = useState(item.owner)
-  useEffect(() => setAssignedOwner(item.owner), [item.id, item.owner])
+  const [preview, setPreview] = useState<"Jira" | "Slack" | null>(null)
   return (
     <div className="page detail-page">
       <Button variant="quiet" className="back-button" onClick={back}>
@@ -805,38 +773,24 @@ function ItemDetails({
             </span>
           </div>
         </div>
-        <Button
-          variant={followedUp ? "secondary" : "primary"}
-          onClick={() => setFollowedUp(!followedUp)}
-        >
-          {followedUp && <Icon name="check" size={17} />}
-          {followedUp ? "Follow-up noted" : "Mark follow-up noted"}
-        </Button>
+
       </div>
 
-      <section className="detail-card" aria-label="Demo actions" style={{marginBottom: 18}}>
-        <span className="eyebrow">Functional demo actions · saved in this browser</span>
-        <div style={{display:"flex", gap:12, flexWrap:"wrap", alignItems:"center", marginTop:12}}>
-          <label htmlFor="assign-owner">Assign to</label>
-          <select id="assign-owner" value={assignedOwner} onChange={e => setAssignedOwner(e.target.value)} style={{padding:10,borderRadius:8}}>
-            {Array.from(new Set([...initialRecords.map(i => i.owner), assignedOwner])).map(person => <option key={person}>{person}</option>)}
-          </select>
-          <Button variant="primary" onClick={() => assign(item.id, assignedOwner)}>Assign</Button>
-          <Button onClick={() => { snooze(item.id, 3); back() }}>Snooze 3 days</Button>
-          <Button onClick={() => { complete(item.id); back() }}>Mark Done</Button>
-        </div>
-        {item.snoozedUntil && <p style={{marginTop:12}}>Snoozed until {item.snoozedUntil}. This item is hidden from the active feed until that date.</p>}
-        {item.status === "Done" && <p style={{marginTop:12}}>Completed in demo workspace.</p>}
-      </section>
-      {followedUp && (
-        <div className="local-note">
-          <Icon name="check" size={16} />
-          Follow-up saved locally. This item remains {item.status.toLowerCase()}{" "}
-          until its source status changes.
-        </div>
-      )}
-
-      <div className="local-note" style={{marginBottom:14}}><Icon name="inbox" size={16} /><span>Trace this insight to its source: </span><button type="button" onClick={openEvidence} style={{textDecoration:"underline",fontWeight:600,cursor:"pointer"}}>Open mock Jira issue and Slack thread ↗</button></div>
+      <div className="local-note" style={{marginBottom:14,display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+        <Icon name="external" size={16}/><strong>Source evidence</strong>
+        <button type="button" onClick={()=>setPreview("Jira")} style={{textDecoration:"underline",cursor:"pointer"}}>View Jira issue ↗</button>
+        <button type="button" onClick={()=>setPreview("Slack")} style={{textDecoration:"underline",cursor:"pointer"}}>View Slack thread ↗</button>
+        <span style={{fontSize:12,opacity:.65}}>Simulated source previews</span>
+      </div>
+      {preview && <div role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)setPreview(null)}} style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(18,27,42,.65)",display:"flex",justifyContent:"center",alignItems:"center",padding:18}}>
+        <section role="dialog" aria-modal="true" aria-label={preview+" mock source preview"} style={{background:"#fff",borderRadius:13,width:"min(1050px,100%)",height:"min(780px,92vh)",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 24px 80px #0004"}}>
+          <header style={{padding:"14px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid #e5e9f0"}}>
+            <strong>{preview} preview · {item.id} <span style={{fontSize:12,opacity:.6}}>MOCK DATA</span></strong>
+            <button autoFocus type="button" onClick={()=>setPreview(null)} aria-label="Close source preview" style={{padding:"8px 12px",border:"1px solid #ccd2da",borderRadius:7,cursor:"pointer"}}>Close ×</button>
+          </header>
+          <iframe title={preview+" evidence for "+item.id} sandbox="" srcDoc={sourcePreviewHtml(item,preview)} style={{width:"100%",flex:1,border:0,background:"#fff"}}/>
+        </section>
+      </div>}
       <div className="detail-grid">
         <main className="detail-main">
           <section className="detail-card insight-card">
@@ -858,7 +812,7 @@ function ItemDetails({
             <div className="next-action-row">
               <div>
                 <h2>{item.nextAction}</h2>
-                <p>WorkRadar won’t message teammates or change source tools.</p>
+                <p>Read-only recommendation. Follow up in the original source system.</p>
               </div>
               <span className="source-demo-note" title="Source URLs are not provided in the supplied sample data">Source link unavailable in demo</span>
             </div>
@@ -1237,57 +1191,14 @@ function EmptyState({
 }
 
 
-function DemoDataPage({ records, focus, openItem, onAll }: {
-  records: WorkItem[]; focus?: string; openItem: (item: WorkItem, from: View) => void; onAll: () => void
-}) {
-  const [selected, setSelected] = useState(focus || mockEvidence[0].id)
-  const [source, setSource] = useState<"jira" | "slack">("jira")
-  useEffect(() => { if(focus) setSelected(focus) }, [focus])
-  const issue = mockEvidence.find(e => e.id === selected) || mockEvidence[0]
-  const item = records.find(e => e.id === issue.id)
-  const actionStyle = {fontSize:13,padding:"8px 12px",borderRadius:8,border:"1px solid #d5d9e0",background:"#fff",cursor:"pointer"} as const
-  const sectionStyle = {padding:22,border:"1px solid #e1e5eb",borderRadius:12,background:"#fff"} as const
-  return <div className="page">
-    <PageHeader title="Demo Data" subtitle="Source-first walkthrough · Simulated Jira issues and Slack conversations · Reference date: 21 October 2026" />
-    <p style={{fontSize:13,marginBottom:16,color:"#687184"}}>All records on this page are fictional, locally embedded fixtures. No Jira or Slack workspace is connected. Select a record, inspect the evidence, then open the corresponding WorkRadar insight.</p>
-    <div style={{display:"flex",gap:9,flexWrap:"wrap",marginBottom:16}}>
-      {mockEvidence.map(e => <button key={e.id} type="button" onClick={() => { setSelected(e.id); onAll() }} style={{...actionStyle, background:selected===e.id?"#edf3ff":"#fff",borderColor:selected===e.id?"#739cf5":"#d5d9e0"}}>{e.id}</button>)}
-    </div>
-    <div style={{display:"flex",gap:8,marginBottom:15}}>
-      <button type="button" onClick={()=>setSource("jira")} style={{...actionStyle,fontWeight:source==="jira"?700:400}}>Jira issue</button>
-      <button type="button" onClick={()=>setSource("slack")} style={{...actionStyle,fontWeight:source==="slack"?700:400}}>Slack thread ({issue.messages.length})</button>
-      {item && <button type="button" onClick={()=>openItem(item,"data")} style={{...actionStyle,marginLeft:"auto",background:"#eef3ff"}}>View in WorkRadar →</button>}
-    </div>
-    {source === "jira" ? <section style={sectionStyle}>
-      <div style={{fontSize:12,color:"#637085",marginBottom:10}}>Projects / {item?.project || "Demo"} / {issue.id} <span style={{float:"right"}}>JIRA · MOCK ISSUE</span></div>
-      <h2 style={{fontSize:23,marginBottom:12}}>{item?.title || issue.id}</h2>
-      <div style={{display:"flex",gap:20,flexWrap:"wrap",marginBottom:24,fontSize:13}}>
-        <span>Type: <b>{issue.issueType}</b></span><span>Status: <b>{item?.status || "Pending"}</b></span>
-        <span>Priority: <b>{item?.priority}</b></span><span>Assignee: <b>{item?.owner}</b></span>
-      </div>
-      <h3 style={{fontSize:15,marginBottom:8}}>Description</h3><p>{issue.description}</p>
-      <div style={{display:"flex",gap:24,flexWrap:"wrap",fontSize:13,marginTop:22,color:"#637085"}}><span>Created: {issue.created}</span><span>Last source update: {issue.updated}</span><span>Issue key: {issue.id}</span></div>
-      <div style={{marginTop:22,padding:15,background:"#f7f9fc",borderRadius:8}}><strong>Dependency / blocker</strong><p style={{marginTop:6}}>{item?.blocker}</p></div>
-      <h3 style={{fontSize:15,marginTop:24}}>Activity</h3>
-      {issue.messages.map((m,i)=><p key={i} style={{padding:"9px 0",borderBottom:"1px solid #eee",fontSize:13}}><b>{m.timestamp}</b> · {m.author}: {m.text}</p>)}
-      <button type="button" onClick={()=>setSource("slack")} style={{...actionStyle,marginTop:16}}>View linked Slack conversation →</button>
-    </section> : <section style={sectionStyle}>
-      <div style={{fontSize:12,color:"#637085",marginBottom:14}}>SLACK · MOCK CONVERSATION · WORKRADAR DEMO WORKSPACE</div>
-      <h2 style={{fontSize:21,marginBottom:8}}># {issue.channel}</h2>
-      <p style={{fontSize:13,color:"#637085",marginBottom:22}}>Thread referencing <b>{issue.id}</b> · {issue.messages.length} messages</p>
-      {issue.messages.map((m,i)=><div key={i} style={{display:"flex",gap:14,padding:"17px 0",borderTop:"1px solid #e9edf2"}}>
-        <div style={{width:36,height:36,flexShrink:0,borderRadius:7,background:"#e7e1f2",display:"grid",placeItems:"center",fontWeight:700}}>{m.author.split(" ").map(n=>n[0]).join("")}</div>
-        <div><div style={{marginBottom:6}}><strong>{m.author}</strong> <span style={{fontSize:12,color:"#687184",marginLeft:8}}>{m.timestamp}</span></div><p style={{fontSize:14}}>{m.text}</p></div>
-      </div>)}
-      <button type="button" onClick={()=>setSource("jira")} style={{...actionStyle,marginTop:18}}>View linked Jira issue →</button>
-    </section>}
-    <div style={{...sectionStyle,marginTop:16}}><span className="eyebrow">WORKRADAR INTERPRETATION</span>
-      <h3 style={{fontSize:17,margin:"9px 0"}}>{item?.reason}</h3>
-      <p style={{fontSize:13}}>Recommended next step: {item?.nextAction}</p>
-      <p style={{fontSize:12,color:"#637085",marginTop:10}}>Provenance: {issue.id} Jira issue + #{issue.channel} conversation. Local demo actions modify WorkRadar's stored copy, not the original source fixture.</p>
-      {item && <button type="button" onClick={()=>openItem(item,"data")} style={{...actionStyle,marginTop:14}}>Open work item →</button>}
-    </div>
-  </div>
+
+function sourcePreviewHtml(item: WorkItem, source: "Jira" | "Slack") {
+  const evidence = mockEvidence.find(e=>e.id===item.id)
+  if (!evidence) return "<p>Mock evidence unavailable.</p>"
+  const esc=(value:string)=>value.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;")
+  const css='<style>*{box-sizing:border-box}body{margin:0;font:14px system-ui,Arial,sans-serif;color:#253147;background:#fff}header{padding:16px 26px;background:#f7f8fa;border-bottom:1px solid #dce1e7;font-weight:700}main{padding:24px 30px;max-width:960px;margin:auto}h1{font-size:24px;line-height:1.3}h2{font-size:15px;margin-top:30px}.pill{display:inline-block;padding:5px 9px;border-radius:5px;background:#edf1f7;margin:3px 7px 3px 0;font-size:12px}.muted{color:#677387}.message{padding:16px 0;border-top:1px solid #eaedf1;display:flex;gap:13px}.avatar{height:36px;width:36px;background:#e9e4f4;color:#553788;font-weight:700;display:grid;place-items:center;border-radius:6px;flex-shrink:0}.message p{margin:7px 0}.time{font-size:12px;color:#6c7785}.details{background:#f7f9fc;padding:16px;border:1px solid #e0e6ef;border-radius:8px}</style>'
+  if(source==="Jira") return '<!doctype html><html><head><meta charset="utf-8">'+css+'</head><body><header>🔷 Jira Software &nbsp; / &nbsp; '+esc(item.project)+' &nbsp; / &nbsp; '+esc(item.id)+' <span class="muted" style="float:right">SIMULATED RECORD</span></header><main><div class="muted">Projects / '+esc(item.project)+' / '+esc(item.id)+'</div><h1>'+esc(item.title)+'</h1><div><span class="pill">'+esc(evidence.issueType)+'</span><span class="pill">'+esc(item.status)+'</span><span class="pill">Priority: '+esc(item.priority)+'</span></div><h2>Description</h2><p>'+esc(evidence.description)+'</p><h2>Dependencies / blocker</h2><div class="details">'+esc(item.blocker)+'</div><h2>Details</h2><p>Assignee: <strong>'+esc(item.owner)+'</strong> &nbsp; | &nbsp; Created: '+esc(evidence.created)+' &nbsp; | &nbsp; Updated: '+esc(evidence.updated)+'</p><h2>Activity</h2>'+evidence.messages.map(m=>'<div class="message"><div><strong>'+esc(m.author)+'</strong> <span class="time">'+esc(m.timestamp)+'</span><p>'+esc(m.text)+'</p></div></div>').join('')+'</main></body></html>'
+  return '<!doctype html><html><head><meta charset="utf-8">'+css+'</head><body><header>🟪 Slack &nbsp; / &nbsp; WorkRadar Demo Workspace <span class="muted" style="float:right">SIMULATED THREAD</span></header><main><h1># '+esc(evidence.channel)+'</h1><p class="muted">Thread discussing '+esc(item.id)+' · '+evidence.messages.length+' replies / messages</p>'+evidence.messages.map(m=>'<div class="message"><div class="avatar">'+esc(m.author.split(" ").map(p=>p[0]).join(""))+'</div><div><strong>'+esc(m.author)+'</strong> <span class="time">'+esc(m.timestamp)+'</span><p>'+esc(m.text)+'</p></div></div>').join('')+'</main></body></html>'
 }
 
 function StatesPage({ navigate }: { navigate: (view: View) => void }) {
@@ -1335,34 +1246,12 @@ function StatesPage({ navigate }: { navigate: (view: View) => void }) {
 }
 
 export default function App() {
-  const [records, setRecords] = useState<WorkItem[]>(storedRecords)
+  const records = initialRecords
   const [view, setView] = useState<View>("dashboard")
   const [qaScenario, setQaScenario] = useState<QaScenario>("default")
   const [qaToast, setQaToast] = useState("")
   const [selectedItem, setSelectedItem] = useState<WorkItem>(initialRecords[0])
   const [returnView, setReturnView] = useState<View>("feed")
-  const [evidenceFocus, setEvidenceFocus] = useState<string | undefined>()
-  const [followedUpIds, setFollowedUpIds] = useState<string[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("workradar-followups") || "[]")
-    } catch {
-      return []
-    }
-  })
-
-  useEffect(() => { localStorage.setItem("workradar-demo-v2", JSON.stringify(records)) }, [records])
-  const assign = (id: string, owner: string) => setRecords(current => current.map(item => item.id === id ? {...item, owner} : item))
-  const complete = (id: string) => setRecords(current => current.map(item => item.id === id ? {...item, status: "Done", snoozedUntil: undefined} : item))
-  const snooze = (id: string, days: number) => {
-    const date = new Date(BASE_DATE + "T12:00:00Z")
-    date.setUTCDate(date.getUTCDate() + days)
-    setRecords(current => current.map(item => item.id === id ? {...item, snoozedUntil: date.toISOString().slice(0,10)} : item))
-  }
-  const reset = () => { setRecords(initialRecords); setFollowedUpIds([]); setQaScenario("default"); setView("dashboard") }
-  useEffect(() => {
-    localStorage.setItem("workradar-followups", JSON.stringify(followedUpIds))
-  }, [followedUpIds])
-
   const navigate = (nextView: View) => {
     setView(nextView)
     window.scrollTo({ top: 0, behavior: "smooth" })
@@ -1372,15 +1261,6 @@ export default function App() {
     setSelectedItem(item)
     setReturnView(from)
     navigate("details")
-  }
-  const openEvidence = (id?: string) => { setEvidenceFocus(id); navigate("data") }
-
-  const setFollowedUp = (value: boolean) => {
-    setFollowedUpIds((current) =>
-      value
-        ? Array.from(new Set([...current, selectedItem.id]))
-        : current.filter((id) => id !== selectedItem.id),
-    )
   }
 
   const selectQaScenario = (scenario: QaScenario, targetView: View) => {
@@ -1401,7 +1281,7 @@ export default function App() {
   }
 
   return (
-    <DemoContext.Provider value={{ records, assign, complete, snooze, reset }}>
+    <DemoContext.Provider value={{ records }}>
     <div className="app-shell">
       <Sidebar view={view} navigate={navigate} />
       <div className="content">
@@ -1432,16 +1312,11 @@ export default function App() {
           <ItemDetails
             item={records.find(i => i.id === selectedItem.id) || selectedItem}
             back={() => navigate(returnView)}
-            followedUp={followedUpIds.includes(selectedItem.id)}
-            setFollowedUp={setFollowedUp}
-            openEvidence={() => openEvidence(selectedItem.id)}
           />
         )}
         {view === "states" && <StatesPage navigate={navigate} />}
-        {view === "data" && <DemoDataPage records={records} focus={evidenceFocus} openItem={openItem} onAll={() => setEvidenceFocus(undefined)} />}
       </div>
       <QaControls scenario={qaScenario} onSelect={selectQaScenario} />
-      <button type="button" onClick={reset} title="Reset all demo actions" style={{position:"fixed",right:16,bottom:90,zIndex:50,padding:"9px 14px",background:"#fff",color:"#333",border:"1px solid #bbb",borderRadius:9,cursor:"pointer"}}>Reset demo data</button>
       {qaToast && (
         <div className="qa-toast" role="status">
           <Icon name="check" size={16} />
